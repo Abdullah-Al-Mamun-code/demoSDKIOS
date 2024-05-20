@@ -36,7 +36,7 @@ jobs:
 
     - name: Add CUE Frameworks repo and install pods
       run: |
-        pod repo add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
+        pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
         pod install
 
     - name: Set up Xcode
@@ -49,5 +49,5 @@ jobs:
       run: |
         rm -rf Pods/
         rm -rf Podfile.lock
-        pod repo update cocoapods-local
+        pod repo-art update cocoapods-local
         pod install
