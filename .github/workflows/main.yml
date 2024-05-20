@@ -19,18 +19,19 @@ jobs:
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: 2.7
+        ruby-version: '2.7'
 
     - name: Install CocoaPods and cocoapods-art
       run: |
         sudo gem install cocoapods
         sudo gem install cocoapods-art
+        pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
 
     - name: Install dependencies
       run: pod install
 
     - name: Build and Test
-      run: xcodebuild clean build test
+      run: xcodebuild clean build test -workspace sdk_demo_ios.xcworkspace -scheme sdk_demo_ios -destination 'platform=iOS Simulator,name=iPhone 12'
       env:
         GYM_CODE_SIGNING_IDENTITY: "Apple Development"
         GYM_PROFILE_NAME: "match Development *"
