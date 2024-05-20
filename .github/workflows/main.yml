@@ -1,0 +1,51 @@
+name: CUE Live Demo CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '2.7'  # Use the Ruby version required for your project
+
+    - name: Install CocoaPods
+      run: |
+        brew install cocoapods
+        gem install cocoapods-art
+
+    - name: Configure netrc for CocoaPods Artifactory
+      run: |
+        echo "machine cueaudio.jfrog.io" >> ~/.netrc
+        echo "login ${{ secrets.CUE_USERNAME }}" >> ~/.netrc
+        echo "password ${{ secrets.CUE_PASSWORD }}" >> ~/.netrc
+
+    - name: Add CUE Frameworks repo and install pods
+      run: |
+        pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
+        pod install
+
+    - name: Set up Xcode
+      run: sudo xcode-select --switch /Applications/Xcode_12.5.app  # Adjust Xcode version as necessary
+
+    - name: Build and Test
+      run: xcodebuild -workspace CUELiveDemo-Swift.xcworkspace -scheme CUELiveDemo -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 11,OS=14.5' clean build test
+
+    - name: Clean up
+      run: |
+        rm -rf Pods/
+        rm -rf Podfile.lock
+        pod repo-art update cocoapods-local
+        pod install
