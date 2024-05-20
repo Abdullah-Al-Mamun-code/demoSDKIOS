@@ -25,14 +25,12 @@ jobs:
       run: |
         sudo gem install cocoapods
         sudo gem install cocoapods-art
-        pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
+
+    - name: Add cocoapods-local repository
+      run: pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local" --username admin --password jx@k=({1dKFHKu
 
     - name: Install dependencies
       run: pod install
 
     - name: Build and Test
       run: xcodebuild clean build test -workspace sdk_demo_ios.xcworkspace -scheme sdk_demo_ios -destination 'platform=iOS Simulator,name=iPhone 12'
-      env:
-        GYM_CODE_SIGNING_IDENTITY: "Apple Development"
-        GYM_PROFILE_NAME: "match Development *"
-        GYM_OUTPUT_DIRECTORY: "./output"
