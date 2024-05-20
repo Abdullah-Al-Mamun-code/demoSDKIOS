@@ -1,0 +1,128 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      # - develop
+      # - testing
+      # - staging
+
+  pull_request:
+    branches:
+      - main
+      - develop
+      - testing
+      - staging
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up variables
+      run: |
+        echo "vmImageMac=macos-latest" >> $GITHUB_ENV
+        echo "vmImageUbu=ubuntu-latest" >> $GITHUB_ENV
+        echo "tplProjectName=ios-webview-sdk" >> $GITHUB_ENV
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "webAppName=dev-dxp" >> $GITHUB_ENV
+          echo "cdnAccountName=devdxpcdn" >> $GITHUB_ENV
+          echo "cdnGroup=dev-dxp-grp" >> $GITHUB_ENV
+          echo "cdnEndpoint=dev-dxp" >> $GITHUB_ENV
+          echo "domainDXP=developdxp.com" >> $GITHUB_ENV
+          echo "saveLast=10" >> $GITHUB_ENV
+          echo "uriPath=webview-sdk/ios" >> $GITHUB_ENV
+          echo "performPurgeAFD=true" >> $GITHUB_ENV
+        fi
+
+    - name: Create directories
+      run: mkdir -p ${{ github.workspace }}/WebViewSDK.framework/{debug,release}
+
+    - name: Download WebViewSDK.framework.zip
+      uses: azure/cli@v1
+      with:
+        inlineScript: |
+          az storage blob download --account-name ${{ env.cdnAccountName }} --container-name '$web' --file ${{ github.workspace }}/WebViewSDK.framework/release/WebViewSDK.framework.zip --name "webview-sdk/ios/release/WebViewSDK.framework.zip"
+
+    - name: Extract WebViewSDK.framework.zip
+      run: unzip ${{ github.workspace }}/WebViewSDK.framework/release/WebViewSDK.framework.zip -d ./WebViewDemo/lib
+
+    - name: List files in ./WebViewDemo/lib
+      run: ls -lFht ./WebViewDemo/lib
+
+    - name: Install Apple Certificate
+      uses: apple-actions/import-codesign-certs@v1
+      with:
+        p12-file: ${{ secrets.APPLE_CERTIFICATE }}
+        p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+    - name: Install Apple Provisioning Profile
+      uses: apple-actions/import-provisioning-profiles@v1
+      with:
+        provisioning-profile-path: ${{ secrets.PROVISIONING_PROFILE }}
+
+    - name: Build with Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '13'
+        use-beta: true
+      run: |
+        xcodebuild -workspace WebViewDemo.xcodeproj/project.xcworkspace -scheme WebViewDemo -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+
+    - name: Archive the app
+      run: |
+        xcodebuild -workspace WebViewDemo.xcodeproj/project.xcworkspace -scheme WebViewDemo -sdk iphoneos -configuration Release -archivePath ./build/WebVewDemoRelease.xcarchive archive
+        xcodebuild -exportArchive -archivePath ./build/WebVewDemoRelease.xcarchive -exportPath ./build/output -exportOptionsPlist ./WebViewDemo/ExportOptions.plist
+
+    - name: Show IPA file
+      run: ls -lFht ./build/output/WebViewDemo.ipa
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: WebViewDemo.ipa
+        path: ./build/output/WebViewDemo.ipa
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Copy IPA file
+      run: cp ${{ github.workspace }}/build/output/WebViewDemo.ipa ${{ github.workspace }}/drop/WebViewDemo.b${{ github.run_id }}.ipa
+
+    - name: Show IPA file in drop
+      run: ls -lFht ${{ github.workspace }}/drop/
+
+    - name: Deploy to Azure Storage
+      uses: azure/cli@v1
+      with:
+        inlineScript: |
+          az storage blob upload-batch -d "\$web/${{ env.uriPath }}/release" -s ${{ github.workspace }}/drop/ --account-name ${{ env.cdnAccountName }} --overwrite=true
+
+  purge_cdn:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.event_name != 'pull_request'
+
+    steps:
+    - name: Purge AFD
+      uses: azure/cli@v1
+      with:
+        inlineScript: |
+          az afd endpoint purge --resource-group ${{ env.cdnGroup }} --profile-name ${{ env.cdnEndpoint }}-standard --endpoint-name ${{ env.cdnEndpoint }} --content-paths '/*' --domains file.${{ env.domainDXP }}
+
+    - name: Leave the last files for CDN
+      uses: azure/cli@v1
+      with:
+        inlineScript: |
+          echo "Leaving the last ${{ env.saveLast }} files in webview-sdk/ios/release/WebViewDemo.b"
+          az storage blob list --container-name \$web --account-name ${{ env.cdnAccountName }} --prefix "webview-sdk/ios/release/WebViewDemo.b" --query "sort_by([].{name:name, Date:properties.lastModified}, &Date)" -otsv | awk '{print $1}' | head -n -${{ env.saveLast }} | xargs -I {} az storage blob delete --container-name \$web --account-name ${{ env.cdnAccountName }} --name {}
