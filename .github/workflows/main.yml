@@ -27,7 +27,10 @@ jobs:
         sudo gem install cocoapods-art
 
     - name: Add cocoapods-local repository
-      run: pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local" --username admin --password 'jx@k=({1dKFHKu'
+      env:
+        COCOAPODS_ART_USERNAME: admin
+        COCOAPODS_ART_PASSWORD: jx@k=({1dKFHKu
+      run: pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
 
     - name: Install dependencies
       run: pod install
