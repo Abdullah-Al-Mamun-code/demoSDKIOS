@@ -33,10 +33,12 @@ jobs:
         echo "login admin" >> ~/.netrc
         echo "password jx@k=({1dKFHKu" >> ~/.netrc
         chmod 600 ~/.netrc
+        echo "Contents of .netrc file:"
+        cat ~/.netrc
 
     - name: Add CUE Frameworks repo and install pods
       run: |
-        pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
+        pod repo add cocoapods-local "https://cueaudio.jfrog.io/artifactory/api/pods/cocoapods-local"
         pod install
 
     - name: Set up Xcode
@@ -49,5 +51,5 @@ jobs:
       run: |
         rm -rf Pods/
         rm -rf Podfile.lock
-        pod repo-art update cocoapods-local
+        pod repo update cocoapods-local
         pod install
