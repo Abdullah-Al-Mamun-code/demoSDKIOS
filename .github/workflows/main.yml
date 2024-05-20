@@ -28,9 +28,11 @@ jobs:
 
     - name: Configure netrc for CocoaPods Artifactory
       run: |
+        touch ~/.netrc
         echo "machine cueaudio.jfrog.io" >> ~/.netrc
-        echo "login ${{admin}}" >> ~/.netrc
-        echo "password ${{jx@k=({1dKFHKu}}" >> ~/.netrc
+        echo "login admin" >> ~/.netrc
+        echo "password jx@k=({1dKFHKu" >> ~/.netrc
+        chmod 600 ~/.netrc
 
     - name: Add CUE Frameworks repo and install pods
       run: |
