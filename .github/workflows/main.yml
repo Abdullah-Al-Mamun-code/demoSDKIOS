@@ -1,4 +1,4 @@
-name: CUE Live Demo CI
+name: iOS CI
 
 on:
   push:
@@ -13,43 +13,45 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: '2.7'  # Use the Ruby version required for your project
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '2.7' # Adjust the Ruby version if needed
 
-    - name: Install CocoaPods
-      run: |
-        brew install cocoapods
-        gem install cocoapods-art
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14' # Adjust the Node.js version if needed
 
-    - name: Configure netrc for CocoaPods Artifactory
-      run: |
-        touch ~/.netrc
-        echo "machine cueaudio.jfrog.io" >> ~/.netrc
-        echo "login admin" >> ~/.netrc
-        echo "password jx@k=({1dKFHKu" >> ~/.netrc
-        chmod 600 ~/.netrc
-        echo "Contents of .netrc file:"
-        cat ~/.netrc
+      - name: Install CocoaPods
+        run: |
+          gem install cocoapods
+          pod install
+          
+      - name: Install dependencies
+        run: |
+          npm install
+          bundle install
 
-    - name: Add CUE Frameworks repo and install pods
-      run: |
-        pod repo add cocoapods-local "https://cueaudio.jfrog.io/artifactory/api/pods/cocoapods-local"
-        pod install
+      - name: Set up Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_12.4.app # Adjust the Xcode version if needed
+          sudo xcodebuild -license accept
 
-    - name: Set up Xcode
-      run: sudo xcode-select --switch /Applications/Xcode_12.5.app  # Adjust Xcode version as necessary
+      - name: Build and test
+        run: |
+          xcodebuild -workspace sdk_demo_ios.xcworkspace \
+                     -scheme sdk_demo_ios \
+                     -sdk iphonesimulator \
+                     -destination 'platform=iOS Simulator,name=iPhone 11,OS=14.4' \
+                     clean test
 
-    - name: Build and Test
-      run: xcodebuild -workspace CUELiveDemo-Swift.xcworkspace -scheme CUELiveDemo -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 11,OS=14.5' clean build test
-
-    - name: Clean up
-      run: |
-        rm -rf Pods/
-        rm -rf Podfile.lock
-        pod repo update cocoapods-local
-        pod install
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-results
+          path: test-results
