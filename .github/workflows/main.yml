@@ -1,42 +1,235 @@
-name: iOS CI
-
+name: Create CUE Live QA Build from SDK
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        required: true
+        description: 'Do testing "dry run" instead of the real one.'
+        default: false
+      client:
+        type: choice
+        required: true
+        default: Default
+        description: The argument passed into set_client
+        options:
+          - Default
+          - CarolinaHurricanes
+          - NashvillePredatorsYinzcam
+          - NashvilleSC
+          - Tottenham
+          - ClevelandBrowns
+          - MiamiDolphins
+          - SeattleSeahawks
+          - LAKings
+          - FCCincinnati
+          - ClubMonterrey
+          - LAChargers
+          - DetroitRedWings
+          - EdmontonOilers
+          - Steelers
+          - NewYorkLiberty
+          - Pittsburghsteelers
+          - LAGalaxy
+          - LasVegasRaiders
+          - HoustonDynamo
+          - NewJerseyDevils
+          - IosActionsTest
+          - PhiladelphiaEagles
+          - DetroitLions
+          - DetriotLions
+          - TampaBay
+          - SanFrancisco
+          - DenverBroncos
+          - ArizonaCardinals
+          - BET
+          - BYU
+          - Baylor
+          - CedarFair
+          - CharlotteFC
+          - ChicagoFire
+          - Chiefs
+          - Cincinnati
+          - CincinnatiBengals
+          - GeorgiaTech
+          - GreenbayPackers
+          - HoustonTexans
+          - IndianaPacers
+          - IowaState
+          - Minnesota
+          - MinnesotaUnited
+          - Nevada
+          - NewOrleansPelicans
+          - OhioState
+          - OrlandoMagic
+          - Redmind
+          - Saints
+          - SandyAndJr
+          - SpeedwayMotorsports
+          - SportingKC
+          - StLouisBlues
+          - StPaul
+          - TCU
+          - TennesseeTitans
+          - UtahJazz
+          - seventysixers
+          - Karjala
+      version:
+        type: string
+        required: false
+        description: The semantic version of the app
+      api_key:
+        type: string
+        required: false
+        description: CUELive API key to create a QA Build
+      base_url:
+        description: 'Enter Base URL. If is blank, "https://live.cueaudio.com/v1" is used.'
+        required: false
+        type: string
+      bundle_id:
+        type: choice
+        required: true
+        default: com.cueaudio.cue.qa
+        description: 'Bundle ID: to create "CUE Live QA" or "CUE Live Dev" app'
+        options:
+          - com.cueaudio.cue.qa
+          - com.cueaudio.cuedev
+  repository_dispatch:
+    types: [cue-live-qa]
+  push:
+    tags:
+      - '*.*.*'
 
 jobs:
-  build:
-    runs-on: macos-latest
+  check-dry-run:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.early.outputs.dry_run_output }}
+    steps:
+      - env:
+          EVENT_CONTEXT: ${{ toJSON(github.event) }}
+        name: Run with parameters
+        run: |
+          echo $EVENT_CONTEXT
+      - id: early
+        name: Checking "dry run" parameter
+        run: |
+          payload_dry_run=${{ github.event.client_payload.dry_run }}
+          input_dry_run=${{ github.event.inputs.dry_run }}
+          dry_run=${payload_dry_run:-${input_dry_run}}
+          echo "dry_run_output=$dry_run" >> $GITHUB_OUTPUT
+          echo "Dry run: $dry_run"
+          echo "Argument passed into set_client: ${{ github.event.inputs.client }}" 
+          echo "The semantic version of the app: ${{ github.event.inputs.version }}"
+          echo "CUELive API key to create a QA Build: ${{ github.event.inputs.api_key }}"
+          echo "Base URL: ${{ github.event.inputs.base_url }}"
+          echo "Bundle ID: ${{ github.event.inputs.bundle_id }}"
+  build-and-publish:
+    needs: check-dry-run
+    if: needs.check-dry-run.outputs.status == 'false'  # compared as string
+    runs-on: macos-13
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_15.2.app
 
     steps:
-    - name: Checkout repository
+    - name: Checkout code actions
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        
+    - name: Branch name
+      run: echo running on branch ${GITHUB_REF##*/}
+      
+    - name: Get Client, Version and API Key
+      id: client
+      run: |
+        payload_bundle_client=${{ github.event.client_payload.client }}
+        input_bundle_client=${{ inputs.client }}
+        name=${payload_bundle_client:-${input_bundle_client:-Default}}
+        echo "name=$name" >> $GITHUB_OUTPUT
 
-    - name: Set up Ruby
+        tag_version=$(git tag --points-at HEAD | tail -1)
+        echo "TAG VERSION: $tag_version"
+        payload_version=${{ github.event.client_payload.version }}
+        input_version=${{ inputs.version }}
+        version=${payload_version:-${input_version:-${tag_version}}}
+        echo "version=$version" >> $GITHUB_OUTPUT
+
+        payload_api_key=${{ github.event.client_payload.api_key }}
+        input_api_key=${{ inputs.api_key }}
+        api_key=${payload_api_key:-${input_api_key:-TQeAwPHVnLwJrs5HEWvSmphO9D2dDeHc}}
+        
+        payload_base_url=${{ github.event.client_payload.base_url }}
+        input_base_url=${{ inputs.base_url }}
+        base_url=${payload_base_url:-${input_base_url}}
+        
+        payload_bundle_id=${{ github.event.client_payload.bundle_id }}
+        input_bundle_id=${{ inputs.bundle_id }}
+        bundle_id=${payload_bundle_idl:-${input_bundle_id}}
+        
+        echo "Event API Key: $payload_api_key"
+        echo "Input API Key: $input_api_key"
+        echo "Result API KEY: $api_key"
+        echo "api_key=$api_key" >> $GITHUB_OUTPUT
+        echo "BASE_URL: $base_url"
+        echo "BASE_URL=${base_url}" >> $GITHUB_ENV                
+        echo "BUNDLE_ID: $bundle_id"
+        echo "BUNDLE_ID=${bundle_id}" >> $GITHUB_ENV
+
+    - name: Xcode version
+      run: xcodebuild -version
+
+    - name: Artifactory jfrog-cli and cocoapods installation stage
+      run: |
+        ./deployment/set_net_rc.sh
+        gem install cocoapods-art
+        pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
+        brew install jfrog-cli
+        pod repo list
+        pod install
+        rm ${HOME}/.netrc
+      env:
+        CUE_ARTIFACTORY_USERNAME: ${{ secrets.CUE_ARTIFACTORY_USERNAME }}
+        CUE_ARTIFACTORY_PASSWORD: ${{ secrets.CUE_ARTIFACTORY_PASSWORD }}
+
+    - name: Set up ruby env
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: '2.7'
+        ruby-version: 2.7.2
+        bundler-cache: true
 
-    - name: Install CocoaPods and cocoapods-art
+    - name: Import Code-Signing Certificates (jamesonrader)
+      uses: Apple-Actions/import-codesign-certs@v1
+      with:
+        p12-file-base64: ${{ secrets.JAMESONRADER_IOS_DIST_SIGNING_KEY }}
+        p12-password: ${{ secrets.JAMESONRADER_IOS_DIST_SIGNING_KEY_PASSWORD }}
+        create-keychain: true
+
+    - name: Adjusting base url, value submitted is ${{ env.BASE_URL }}.
       run: |
-        sudo gem install cocoapods
-        sudo gem install cocoapods-art
-
-    - name: Configure .netrc for Artifactory
+        echo "Adjusting base url"
+        echo "Value submitted is ${{ env.BASE_URL }}"
+        if [ -n "${{ env.BASE_URL }}" ]; then
+          echo "Replace https://live.cueaudio.com/v1 with ${{ env.BASE_URL }}"
+          sed -i '' 's,https://live.cueaudio.com/v1,${{ env.BASE_URL }},g' src/defaults.plist
+        fi
+        echo "Content of defaults.plist file now is:"
+        cat src/defaults.plist
+        
+    - name: Build & Upload App to TestFlight (jamesonrader)
       run: |
-        echo "machine cueaudio.jfrog.io login admin password jx@k=({1dKFHKu" > ~/.netrc
-        chmod 600 ~/.netrc
+        BUNDLE_ID="${{ env.BUNDLE_ID }}"     # was "com.cueaudio.cue.qa"
+        CLIENT="${{ steps.client.outputs.name }}"
+        VERSION="${{ steps.client.outputs.version }}"
+        API_KEY="${{ steps.client.outputs.api_key }}"
 
-    - name: Add cocoapods-local repository
-      run: pod repo-art add cocoapods-local "https://cueaudio.jfrog.io/cueaudio/api/pods/cocoapods-local"
-
-    - name: Install dependencies
-      run: pod install
-
-    - name: Build and Test
-      run: xcodebuild clean build test -workspace CUELiveDemo-Swift.xcworkspace -scheme CUELiveDemo-Swift -destination 'platform=iOS Simulator,name=iPhone 12'
+        echo "Replacing apiKey in clients/${CLIENT}/ClientResources/CUEClientConfig.plist"
+        /usr/libexec/PlistBuddy -c "SET apiKey ${API_KEY}" "clients/${CLIENT}/ClientResources/CUEClientConfig.plist"
+        /usr/libexec/PlistBuddy -c "SET hasExit false" "clients/${CLIENT}/ClientResources/CUEClientConfig.plist"
+        /usr/libexec/PlistBuddy -c "print" "clients/${CLIENT}/ClientResources/CUEClientConfig.plist"
+        sh ./deployment/deploy_app_to_testflight.sh "${BUNDLE_ID}" "${CLIENT}" "CUE Live" "${VERSION}" "EL8TZV5FP2"
+      env:
+        ASC_KEY_ID: ${{ secrets.JAMESONRADER_APPSTORE_CONNECT_KEY_ID }}
+        ASC_ISSUER_ID: ${{ secrets.JAMESONRADER_APPSTORE_CONNECT_ISSUER_ID }}
+        ASC_KEY: ${{ secrets.JAMESONRADER_APPSTORE_CONNECT_PRIVATE_KEY }}
+        KEYCHAIN_PATH: ~/Library/Keychains/signing_temp.keychain-db
